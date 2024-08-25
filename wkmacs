@@ -1,0 +1,11 @@
+#!/usr/bin/perl -I/usr/local/lib/wifikey
+
+use strict;
+use 5.012;
+use warnings;
+use wkfuncs;
+use wkmacs;
+
+&wkmacs;
+print &log_get;
+exit 0;

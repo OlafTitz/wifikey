@@ -1,0 +1,58 @@
+#!/usr/bin/perl -I/usr/local/lib/wifikey
+#
+# Determine the devices and SSIDs in use,
+# set up PSK files for them if needed,
+# print instructions on how to change the configuration.
+#
+# Run this once to get ready for wifikey usage,
+# and re-run after each change to the wireless config
+# (esp. when adding an AP).
+#
+# Please verify the permissions on the generated files
+# and be sure to use them correctly (devices with
+# the same SSID also share the same PSK file).
+#
+use strict;
+use open ':std', 'utf8';
+use warnings qw(all);
+use wkfuncs;
+
+my ($l,$p,$uid,$gid) = getpwnam("network");
+for my $dev (&hostapd_list) {
+  &processdev($dev);
+}
+print "Remember to run wifikey-setup after adding any new interfaces.\n";
+exit 0;
+
+sub processdev {
+  my ($dev) = @_;
+  my $s = hostapd_status($dev);
+  my $ssid = $s->{"ssid"};
+  my $band = $s->{"channel"} > 13 ? "5" : "2.4";
+  if ($s->{"key_mgmt"} =~ /WPA-PSK/) {
+    my $psk = &pskfile($ssid);
+    unless (-e $psk) {
+      open(P, ">", $psk) || die;
+      print P "keyid=", &now, " 00:00:00:00:00:00 ", &genkey(16, 1), "\n";
+      close P;
+
+      print "Created new PSK file for `$ssid'.\n";
+      my $mac = &macfile($ssid);
+      open (P, ">>", $mac) && close(P);
+      chown 0, $gid, $psk, $mac if defined($gid);
+      chmod 0660, $psk, $mac if defined($gid);
+    }
+    my $dk = &genkey256;
+    print <<"_END";
+Edit /etc/config/wireless as follows:
+Under the "config wifi-iface" section for SSID=`$ssid' at $band GHz:
+  delete --> option key '...'
+  insert --> option key '$dk'
+  insert --> option wpa_psk_file '$psk'
+
+_END
+  }
+  else {
+    print "Ignoring `$ssid' at $band GHz, not WPA-PSK.\n\n";
+  }
+}

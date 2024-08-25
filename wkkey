@@ -1,0 +1,8 @@
+#!/usr/bin/perl -I/usr/local/lib/wifikey
+
+use strict;
+use JSON::PP;
+use wkkey;
+
+my $J = JSON::PP->new->utf8->pretty;
+print $J->encode(&wkkey($J->decode(@ARGV[0])));

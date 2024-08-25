@@ -1,0 +1,242 @@
+#!/usr/bin/perl -I/usr/local/lib/wifikey
+
+use strict;
+use 5.012;
+use warnings;
+use open ':std', ':utf8';
+use MIME::Base64 qw(encode_base64url decode_base64url);
+use wkfuncs;
+use wkkey;
+use serial;
+
+my $template = "/usr/local/lib/wifikey/wifikey.html";
+my %KLA = (keylist => 1, update => 1, revoke => 1, unrevoke => 1);
+my %PARAM = ();
+
+&parse_param;
+our $pids = &param("pids");
+my %DEV = ();
+if ($pids) {
+  my $DEV = &deserialize(decode_base64url($pids));
+  %DEV = %$DEV;
+} else {
+  &pids_init;
+}
+my @DEV = sort keys %DEV;
+if ($#DEV < 0) {
+  &answer("text/plain; charset=utf-8");
+  print "No known manageable networks";
+  exit 0;
+}
+
+our $dev = &param("selectdev");
+$dev = &param("dev") unless $dev;
+$dev = (sort keys %DEV)[0] unless $dev;
+$PARAM{"dev"} = $dev;
+
+my $action = &param("action") || "status";
+if ($action =~ /^([^:]+):(.*)$/) {
+  $action = $1;
+  my $mac = $2;
+  $PARAM{"mac"} = $mac;
+  $PARAM{"vlanid"} = &param("vlanid:$mac");
+  $PARAM{"comment"} = &param("comment:$mac");
+}
+
+my $length = &param("length") || "";
+my $type = &param("type") || "";
+our $showbuttons = !defined ($KLA{$action});
+
+$PARAM{"action"} = $action;
+$PARAM{"ssid"} = $DEV{$dev}[0];
+my $status = &wkkey(\%PARAM);
+if ($action eq "recallkey") {
+  $PARAM{"action"} = "status";
+  $status = &wkkey(\%PARAM);
+}
+
+if ($action eq "wpsstatus") {
+  &answer("text/plain; charset=utf-8");
+  print $status->{"wps"};
+  exit 0;
+}
+
+&answer;
+our $url = "wifikey";
+my $ndev = $#DEV + 1;
+my $cols = " 1fr" x $ndev;
+our $width = 0;
+for my $d (@DEV) {
+  my $e = $DEV{$d};
+  my $w0 = 0.6 * length($e->[0]);
+  my $w1 = 0.6 * (length($e->[1]) + 4);
+  $width += 2 + ($w0 > $w1 ? $w0 : $w1);
+}
+my $widthk = 5 + 0.9 * length($status->{"key"} || "");
+$widthk = 52 unless $showbuttons;
+$width = $widthk if $width < $widthk;
+$width = $width . "em";
+our $wpsstatus = $status->{"wps"} || "";
+our $wpsdisable = $DEV{$dev}[2] == 0 ? " disabled" : "";
+our $log = &log_get;
+
+{
+  no strict 'refs';
+  open(H, $template);
+  my $show = 1;
+  while (<H>) {
+    m:<%if\((.*)\){%>: && do { $show=eval($1); next; };
+    m:<%}%>: && do { $show=1; next; };
+    s:<%\$([^%]+)%>:$$1:ge;
+    s:<%\&([^%]+)%>:&$1:ge;
+    print if ($show);
+  }
+}
+
+exit 0;
+
+sub pids_init {
+  for my $dev (&hostapd_list) {
+    my $status = hostapd_status($dev);
+    my $k = $status->{"key_mgmt"};
+    if ($k =~ /WPA-PSK/) {
+      my $ssid = $status->{"ssid"};
+      my $band = $status->{"channel"} > 13 ? "5" : "2";
+      my $wps = $status->{"wps_state"} eq "disabled" ? "0" : "1";
+      $DEV{$dev} = [$ssid, $band, $wps];
+    }
+  }
+  $pids = encode_base64url(&serialize(\%DEV));
+}
+
+sub hdr_buttons {
+  my $r = "";
+  for my $d (@DEV) {
+    my $e = $DEV{$d};
+    $r .= "<button type='submit' name='selectdev' value='$d'";
+    $r .= " class='sel'" if ($d eq $dev);
+    $r .= "><div class='hb'>";
+    if ($#DEV > 0) {
+      $_=$e->[0] . "<br>" . $e->[1] . " GHz";
+      s,2 GHz,2.4 GHz,;
+      s, ,&nbsp;,g;
+      $r .= $_;
+    }
+    $r .= "</div></button>";
+  }
+  return $r;
+}
+
+sub show_center_part {
+  if (defined ($KLA{$action})) {
+    return &show_keylist;
+  }
+  else {
+    return &show_key;
+  }
+}
+
+sub show_keylist {
+  my $r = "<table><tr class='x'><td style='font-size:0.7em'>Revoke Recall</td><td>Station</td><td>Known since</td><td>VLAN</td><td>Comment</td><td style='font-size:0.7em'>Update</td></tr>\n";
+  my $M = $status->{"keys"};
+  my $z = 0;
+  for my $K (sort { $b->[2] . $a->[0] cmp $a->[2] . $b->[0] } values %$M) {
+    unless ($K->[0] eq "00:00:00:00:00:00") {
+      my $d = $K->[2];
+      $d =~ s/^(....)(..)(..)(..)(..)(..)/$1-$2-$3 $4:$5:$6/;
+      my ($bl, $di);
+      if ($K->[6]) {
+        $bl = "<button type='submit' name='action' value='unrevoke:$K->[0]' style='color:#C00'>REV</button><button type='submit' disabled>RCL</button>";
+        $di = "disabled";
+      } else {
+        $bl = "<button type='submit' name='action' value='revoke:$K->[0]'>REV</button><button type='submit' name='action' value='recallkey:$K->[0]'>RCL</button>";
+        $di = "";
+      }
+      my $vl = "<input type='text' size=4 name='vlanid:$K->[0]' value='$K->[3]' $di>";
+      my $co = "<input type='text' size=15 name='comment:$K->[0]' value='$K->[5]' $di>";
+      my $br = "<button type='submit' name='action' value='update:$K->[0]' $di>UPD</button>";
+      my $zz = $z == 1 ? 'x' : 'y';
+      $zz .= "r" if ($di);
+      $z = 1 - $z;
+      $r .= "<tr class='$zz'><td>$bl</td><td>$K->[0]</td><td>$d</td><td>$vl</td><td>$co</td><td>$br</td></tr>\n";
+    }
+  }
+  return $r . "</table>\n";
+}
+
+sub show_key {
+  my ($ssid, $key) = ($DEV{$dev}->[0], $status->{"key"});
+  unless ($key) {
+    return <<"_END";
+<pre>
+SSID: $ssid
+No key available
+</pre>
+_END
+  }
+  my $image = `qrencode -tSVG --inline --rle --svg-path -s4 -lL -m4 -8 'WIFI:S:$ssid;T:WPA2;P:$key;;'`;
+  return <<"_END";
+<pre>
+SSID: $ssid
+Key:  $key
+</pre>
+<div>
+$image
+</div>
+_END
+}
+
+sub parse_param {
+  my $ct = $ENV{'CONTENT_TYPE'};
+  my $cl = $ENV{'CONTENT_LENGTH'};
+  if (defined($ct)) {
+    $ct =~ tr/A-Z/a-z/;
+    unless ($ct eq "application/x-www-form-urlencoded" && defined($cl)) {
+      &answer("text/plain", "415 Unsupported Media Type");
+      print "Don't know how to handle this.\n";
+      exit 0;
+    }
+    my $in;
+    read(STDIN, $in, $cl);
+    my @a = split /&/, $in;
+    parse_param0(@a);
+  }
+  my $qs = $ENV{'QUERY_STRING'};
+  if (defined($qs)) {
+      my @a = split /&/, $qs;
+      parse_param0(@a);
+  }
+}
+
+sub parse_param0 {
+  for my $a (@_) {
+   $a =~ /^([^ =]+)\s*=\s*(.*)$/ && do {
+    my ($k, $v) = ($1, $2);
+    $PARAM{unescape($1)} = unescape($2);
+   };
+  }
+}
+
+sub unescape {
+  my ($x) = @_;
+  $x =~ tr/+/ /;
+  $x =~ s/%(..)/chr(hex($1))/ge;
+  return $x;
+}
+
+sub param {
+  return $PARAM{$_[0]};
+}
+
+sub answer {
+  my ($ct, $st) = @_;
+  $ct = "text/html; charset=utf-8" unless ($ct);
+  my $ss = $ENV{"SERVER_SOFTWARE"};
+  if (defined($ss) && $ss =~ /HTTPi/) {
+    $st = "200 OK" unless ($st);
+    print "HTTP/1.0 $st\n";
+  } else {
+    print "Status: $st\n" if ($st);
+  }
+  print "Content-Type: $ct\nCache-Control: no-store\n\n";
+}

@@ -1,0 +1,207 @@
+<HTML>
+<!--
+<%$log%>-->
+<HEAD>
+<TITLE>Wireless access keys</TITLE>
+<META name='viewport' content='width=device-width, initial-scale=1.0'>
+<STYLE type='text/css'>
+ body {
+  background-color: #F8F8F8; margin: 0px; padding: 1em;
+  min-width: <%$width%>;
+ }
+ div {
+  margin: 0px; border: 0px; padding: 0px;
+ }
+ div.h {
+  font-size: 0.5rem;
+  display: flex; flex-direction: row;
+ }
+ div.hb {
+  margin: 0; padding: 0.5em 0.9em; border: 0px;
+ }
+ div.c {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background-color: #FFF;
+  padding-bottom: 2em;
+  border-top: 0px solid #CCC;
+  border-left: 1px solid #CCC;
+  border-right: 1px solid #CCC;
+  border-bottom: 0px solid #CCC;
+ }
+ div.c pre {
+  font-size: 1.3rem;
+  margin: 0px; padding: 1em;
+ }
+ div.b {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #F6F6F6;
+  padding: 1em;
+  border-top: 0px solid #CCC;
+  border-left: 1px solid #CCC;
+  border-right: 1px solid #CCC;
+  border-bottom: 1px solid #CCC;
+  border-bottom-left-radius: 0.3em;
+  border-bottom-right-radius: 0.3em;
+ }
+ div.h button {
+  flex: auto;
+  background-color: #F0F0F0;
+  margin: 0; padding: 0;
+  border-top-left-radius: 0.3em;
+  border-top-right-radius: 0.3em;
+  border-top: 1px solid #DDD;
+  border-left: 1px solid #DDD;
+  border-right: 1px solid #DDD;
+  border-bottom: 1px solid #DDD;
+ }
+ div.h button.sel {
+  background-color: #FFF;
+  border-top: 1px solid #CCC;
+  border-left: 1px solid #CCC;
+  border-right: 1px solid #CCC;
+  border-bottom: 1px solid #FFF;
+ }
+ div.b span.l {
+  flex: auto;
+ }
+ div.b button {
+  background-color: #EEE;
+  margin: 0em 0.5em 0em 0em; padding: 0.5em 0.5em;
+  border-radius: 2px; border: 1px solid #777;
+  height: 100%;
+  font-size: 0.7rem ;
+ }
+ div.b select {
+  background-color: #EEE;
+  margin: 0em 0.1em 0em 0em; padding: 0.4em 0.5em;
+  border-radius: 2px; border: 1px solid #777;
+  height: 100%;
+  font-size: 0.7rem ;
+ }
+ div.b a {
+  align: right;
+ }
+ select {
+  font-size: 0.9em;
+  background-color: #EEE;
+  margin: 0.3em 0.1em; padding: 0.1em 0.1em;
+  border-radius: 0.1em; border: 1px solid #777;
+ }
+ table {
+  margin-top: 2em;
+  font-family: monospace;
+  font-size: 0.9rem;
+  border-collapse: collapse;
+ }
+ tr.x, tr.xr {
+  background-color: #F8F8F8;
+ }
+ tr.y, tr,xr {
+  background-color: #FCFCFC;
+ }
+ td {
+  text-align: left;
+  border-width: 0;
+  padding: 0.2em 0.6em;
+ }
+ tr.xr td, tr.yr td {
+  color: #955;
+ }
+ td button {
+  background-color: #EEE;
+  margin: 0em 0.5em 0em 0em; padding: 0.1em 0.3em;
+  border-radius: 2px; border: 1px solid #777;
+ }
+ @media print {
+  body  { background-color: #FFF; }
+  div.h { display: none; }
+  div.c { border: 0px; }
+  div.b { display: none; }
+ }
+</STYLE>
+<SCRIPT type='text/javascript'>
+  function wpstimer(p, s) {
+    let b = document.getElementById('wpsbutton');
+    let k = document.getElementById('keybutton');
+    if (s != undefined) {
+      b.wpsstatus = s;
+    }
+    switch (b.wpsstatus) {
+    case 'Disabled':
+    case 'Success':
+    case '':
+      b.style.backgroundColor = '#EEE';
+      b.value = 'startwps';
+      k.disabled = false;
+      break;
+    case 'Timed-out':
+    case 'Failed':
+      b.style.backgroundColor = '#FEE';
+      b.value = 'startwps';
+      k.disabled = false;
+      break;
+    case 'Active':
+      b.style.backgroundColor = (p == 1) ? '#FFE' : '#EEE' ;
+      k.disabled = true;
+      b.value = 'stopwps';
+      // FALLTHRU
+    default:
+      window.setTimeout(wpstimer, 500, (p == 1) ? 0 : 1);
+      fetch('<%$url%>?action=wpsstatus&dev=<%$dev%>').then(function(r) {
+        return r.ok ? r.text() : 'Failed';
+      }).then(function(t) {
+        b.wpsstatus = t;
+      });
+    }
+  }
+  document.addEventListener("DOMContentLoaded", function(){wpstimer(1, "<%$wpsstatus%>")});
+  //document.addEventListener("DOMContentLoaded", wpstimer);
+</SCRIPT>
+</HEAD>
+<BODY>
+<FORM method='POST' action='<%$url%>' enctype='application/x-www-form-urlencoded'>
+<div class='h'>
+<%&hdr_buttons%>
+</div>
+<div class='c'>
+<%&show_center_part%>
+</div>
+<div class='b'>
+<span class='l'>
+<%if($showbuttons){%>
+<select name='length'>
+  <option>12</option><option selected>16</option><option>20</option><option>24</option>
+</select>
+<select name='type'>
+  <option value='-1'>(Delete)</option>
+  <option value='0'>Digits</option><option value='1' selected>Letters</option><option value='2'>Any</option>
+</select>
+<button type='submit' id='keybutton' name='action' value='newkey'>New key</button>
+</span>
+<span>
+<button type='submit' name='action' value='keylist'>Stations</button>
+</span>
+<span>
+<button type='submit' id='wpsbutton' name='action' value='startwps' <%$wpsdisable%>>WPS</button>
+<%}%>
+</span>
+<a href="<%$url%>">
+<svg width="25px" height="25px" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+  <path style="fill:none;stroke:#6c6c6c;stroke-width:1.85208;stroke-linecap:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+   d="M 12.084887,20.622818 A 8.2664499,8.2241631 0 0 1 3.3565389,16.283053 8.2664499,8.2241631 0 0 1 4.8654584,6.6920902 8.2664499,8.2241631 0 0 1 14.509229,5.2132641 8.2664499,8.2241631 0 0 1 18.850937,13.907061" />
+  <path style="fill:none;stroke:#6b6b6b;stroke-width:1.85208;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+   d="M 18.850937,13.907061 21.784406,9.9357343" />
+  <path style="fill:none;stroke:#6b6b6b;stroke-width:1.85208;stroke-linecap:round;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+   d="m 15.127176,9.9861427 3.723761,3.9209193" />
+</svg>
+</a>
+</div>
+<input type='hidden' name='dev' value='<%$dev%>'>
+<input type='hidden' name='pids' value='<%$pids%>'>
+</FORM>
+</BODY>
+</HTML>

@@ -1,0 +1,14 @@
+#!/usr/bin/perl -I.
+
+use wkfuncs;
+
+for $i ( 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48 ) {
+	print genkey($i, 0), "\n";
+	print genkey($i, 1), "\n";
+	print genkey($i, 2), "\n";
+}
+exit;
+
+for $i ( 1 .. 100 ) {
+	print genkey(16, 0), "\n";
+}

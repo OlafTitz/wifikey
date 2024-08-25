@@ -1,0 +1,32 @@
+#!/usr/bin/perl -I.
+
+use wkfuncs;
+use Statistics::Basic qw(vector mean stddev);
+
+for my $mode (0, 1, 2) {
+  for my $length (4, 8, 12, 16, 20, 24, 32, 40) {
+    &test($mode, $length);
+  }
+}
+
+sub test {
+  my ($mode, $length) = @_;
+  print "\n >>> $mode $length <<<\n";
+  my %h = ();
+  for my $i (0..9999) {
+    my $k = genkey($length, $mode);
+    grep { ++$h{$_} } (split //, $k);
+  }
+  delete $h{"."} unless ($mode > 2);
+  for my $k (sort keys %h) {
+    printf("%3d %3d\n", ord($k), $h{$k});
+  }
+  my @v = values %h;
+  my @m = (1000000, -1000000);
+  grep { $_ < $m[0] && do { $m[0] = $_; };  $_ > $m[1] && do { $m[1] = $_; }; } @v;
+  my $v = vector(@v);
+  printf("n=%d min=%d max=%d mean=%d stddev=%d\n", $#v + 1, $m[0], $m[1], mean($v), stddev($v));
+  my @l = (0, 0);
+  grep { /short/ && do { ++$l[0]; }; /weak/ && do { ++$l[1]; }; } (split /\n/, &log_get);
+  printf("Short: %d\nWeak: %d\n", $l[0], $l[1]);
+}

@@ -1,0 +1,81 @@
+#!/bin/sh
+# Dummy hostapd_cli for testing
+
+cd /home/olaf/mysrc/wifikey
+
+if test "$1" = "-i" ; then
+	I="$2"
+	C="$3"
+else
+	I="global"
+	C="$1"
+fi
+
+randommac() {
+  ps aux | md5sum | sed 's#\(..\)\(..\)\(..\)\(..\)\(..\)\(..\).*#\1:\2:\3:\4:\5:\6#'
+}
+
+get_config() {
+  case "$I" in
+  phy0-ap0) echo "bssid=98:25:4a:bd:7c:33\nssid=T267\nwps_state=disabled\nkey_mgmt=WPA-EAP-SHA256" ;;
+  phy0-ap1) echo "bssid=9a:25:4a:bd:7c:33\nssid=G267\nwps_state=disabled\nkey_mgmt=WPA-PSK" ;;
+  phy1-ap0) echo "bssid=98:25:4a:bd:7c:32\nssid=T267\nwps_state=disabled\nkey_mgmt=WPA-EAP-SHA256" ;;
+  phy1-ap1) echo "bssid=9a:25:4a:bd:7c:32\nssid=G267\nwps_state=configured\nkey_mgmt=WPA-PSK" ;;
+  phy1-ap2) echo "bssid=9e:25:4a:bd:7c:32\nssid=Tröte\nwps_state=configured\nkey_mgmt=WPA-PSK" ;;
+  *) echo "Failed to connect to hostapd - wpa_ctrl_open: No such file or directory" ;;
+  esac
+}
+
+status() {
+  case "$I" in
+  phy0-*) echo "state=ENABLED\nphy=phy0\nfreq=5300\nchannel=60\nbss[0]=phy0-ap0\nbssid[0]=98:25:4a:bd:7c:33\nssid[0]=T267" ;;
+  phy1-*) echo "state=ENABLED\nphy=phy1\nfreq=2427\nchannel=4\nbss[0]=phy1-ap0\nbssid[0]=98:25:4a:bd:7c:32\nssid[0]=T267\nbss[1]=phy1-ap1\nbssid[1]=9a:25:4a:bd:7c:32\nssid[1]=G267\nbss[2]=phy1-ap2\nbssid[2]=9e:25:4a:bd:7c:32\nssid[2]=Tröte" ;;
+  *) echo "Failed to connect to hostapd - wpa_ctrl_open: No such file or directory" ;;
+  esac
+}
+
+all_sta() {
+  case "$I" in
+  phy0-ap0) echo "$(randommac)\nflags=[AUTH][ASSOC][AUTHORIZED]" ;;
+  phy1-ap0) echo "" ;;
+  phy1-ap1) echo "$(randommac)\nflags=[ASSOC]\n40:41:42:43:44:45\nflags=[AUTH][ASSOC][AUTHORIZED]\n$(randommac)\nflags=[AUTH][ASSOC][AUTHORIZED]" ;;
+  phy1-ap2) echo "$(randommac)\nflags=[AUTH][ASSOC][AUTHORIZED]" ;;
+  *) echo "Failed to connect to hostapd - wpa_ctrl_open: No such file or directory" ;;
+  esac
+}
+
+wps_get_status() {
+  s=$(cat /tmp/$I.wps)
+  # Success
+  if test -z "$s" ; then echo "PBC Status: Disabled\nLast WPS result: Success" ;
+  # Canceled
+  elif test "$s" = "0" ; then echo "PBC Status: Timed-out\nLast WPS result: None" ;
+  # Running
+  elif test "$s" -gt $(date "+%s") ; then echo "PBC Status: Active\nLast WPS result: None" ;
+  # Timeout
+  else echo "PBC Status: Timed-out\nLast WPS result: None" ;
+  fi
+}
+
+wps_pbc () {
+  date -d "now + 1 minute" "+%s" > /tmp/$I.wps
+  echo "OK"
+}
+
+wps_cancel() {
+  echo "0" > /tmp/$I.wps
+  echo "OK"
+}
+
+case "$C" in
+interface) echo "Selected interface 'phy1-ap2'\nAvailable interfaces:\nphy1-ap2\nphy1-ap1\nphy1-ap0\nphy0-ap0\nphy0-ap1\nglobal" ;;
+get_config) get_config ;;
+status) status ;;
+all_sta) all_sta ;;
+wps_get_status) wps_get_status ;;
+wps_pbc) wps_pbc ;;
+wps_cancel) wps_cancel ;;
+reload_wpa_psk) echo "OK" ;;
+disassociate) echo "OK" ;;
+*) echo "Unknown command" ;;
+esac
